@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Butiksplan — 846 m²</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#f5f3ee;color:#1a1a18;padding:1.5rem}
+h2{font-size:20px;font-weight:500;margin-bottom:4px}
+.sub{font-size:13px;color:#666;margin-bottom:1rem}
+.toolbar{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+.toolbar button{font-size:12px;padding:6px 14px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#1a1a18;cursor:pointer}
+.toolbar button:hover{background:#eee}
+.canvas-wrap{overflow:auto;border:1px solid #ccc;border-radius:10px;background:#f8f8f6;max-width:100%}
+canvas{display:block}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px}
+.leg{display:flex;align-items:center;gap:5px;font-size:12px;color:#555}
+.leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.panel{margin-top:1rem;background:#fff;border:1px solid #ddd;border-radius:10px;padding:1rem;display:none;max-width:500px}
+.panel h3{font-size:15px;font-weight:500;margin-bottom:10px}
+.field{margin-bottom:9px}
+.field label{display:block;font-size:12px;color:#666;margin-bottom:3px}
+.field input,.field select{width:100%;font-size:13px;padding:6px 9px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#1a1a18}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn-row{display:flex;gap:8px;margin-top:12px}
+.btn-row button{flex:1;padding:7px;border:1px solid #ccc;border-radius:8px;font-size:13px;cursor:pointer;background:#fff;color:#1a1a18}
+.btn-row button:hover{background:#eee}
+.btn-del{color:#A32D2D!important;border-color:#F09595!important}
+.btn-save{background:#E6F1FB!important;color:#0C447C!important;border-color:#85B7EB!important}
+.hint{font-size:11px;color:#999;margin-top:6px}
+</style>
+</head>
+<body>
+
+<h2>Butiksplan — 846 m²</h2>
+<p class="sub">Klicka på ett objekt för att redigera. Dra för att flytta.</p>
+
+<div class="toolbar">
+  <button id="btn-add">+ Lägg till objekt</button>
+  <button id="btn-zoom-in">Zooma in +</button>
+  <button id="btn-zoom-out">Zooma ut −</button>
+  <button id="btn-export">Exportera lista</button>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="c"></canvas>
+</div>
+<p class="hint">Scrolla för att se hela planen. Dra objekt för att flytta dem.</p>
+
+<div class="legend">
+  <span class="leg"><span class="leg-dot" style="background:#639922"></span>Butik/kläder</span>
+  <span class="leg"><span class="leg-dot" style="background:#EF9F27"></span>Ljus/belysning</span>
+  <span class="leg"><span class="leg-dot" style="background:#D4537E"></span>Doft/kosmetik</span>
+  <span class="leg"><span class="leg-dot" style="background:#378ADD"></span>Inredning</span>
+  <span class="leg"><span class="leg-dot" style="background:#888780"></span>Annat</span>
+</div>
+
+<div class="panel" id="edit-panel">
+  <h3 id="panel-title">Redigera objekt</h3>
+  <div class="row2">
+    <div class="field"><label>Nummer</label><input id="f-num" type="text"></div>
+    <div class="field"><label>Rum</label>
+      <select id="f-room">
+        <option value="0">Ingång</option>
+        <option value="1">Rum 1 — Vänster</option>
+        <option value="2">Rum 2 — Mitten-vänster</option>
+        <option value="3">Rum 3 — Mitten</option>
+        <option value="4">Rum 4 — Mitten-höger</option>
+        <option value="5">Rum 5 — Höger</option>
+      </select>
+    </div>
+  </div>
+  <div class="field"><label>Namn / Produkt</label><input id="f-name" type="text"></div>
+  <div class="field"><label>Kategori</label>
+    <select id="f-cat">
+      <option value="butik">Butik/kläder</option>
+      <option value="ljus">Ljus/belysning</option>
+      <option value="doft">Doft/kosmetik</option>
+      <option value="inred">Inredning</option>
+      <option value="annat">Annat</option>
+    </select>
+  </div>
+  <div class="field"><label>Extra info</label><input id="f-info" type="text"></div>
+  <div class="btn-row">
+    <button class="btn-del" id="btn-del">Ta bort</button>
+    <button id="btn-cancel">Avbryt</button>
+    <button class="btn-save" id="btn-save">Spara</button>
+  </div>
+</div>
+
+<script>
+const CAT_COLORS = {
+  butik: {fill:'#EAF3DE', stroke:'#639922', text:'#27500A'},
+  ljus:  {fill:'#FAEEDA', stroke:'#EF9F27', text:'#633806'},
+  doft:  {fill:'#FBEAF0', stroke:'#D4537E', text:'#72243E'},
+  inred: {fill:'#E6F1FB', stroke:'#378ADD', text:'#0C447C'},
+  annat: {fill:'#F1EFE8', stroke:'#888780', text:'#444441'},
+};
+
+const ROOMS = [
+  {id:1, label:'Rum 1',         x:110, y:60,  w:200, h:360, color:'#f0ede6', stroke:'#bbb'},
+  {id:2, label:'Rum 2',         x:320, y:60,  w:200, h:360, color:'#eceae4', stroke:'#bbb'},
+  {id:3, label:'Rum 3',         x:530, y:60,  w:220, h:360, color:'#f0ede6', stroke:'#bbb'},
+  {id:4, label:'Rum 4',         x:760, y:60,  w:200, h:360, color:'#eceae4', stroke:'#bbb'},
+  {id:5, label:'Rum 5 / Kassa', x:970, y:60,  w:180, h:360, color:'#f0ede6', stroke:'#bbb'},
+];
+
+const W = 1180, H = 480;
+
+let items = [
+  {id:1,  num:'1',  name:'Noira TV-bank',   cat:'inred', info:'',        room:1, x:120, y:100, w:88, h:40},
+  {id:2,  num:'2',  name:'Ocean',           cat:'butik', info:'Lyx',     room:1, x:120, y:150, w:88, h:40},
+  {id:3,  num:'3',  name:'Rossina',         cat:'butik', info:'',        room:1, x:120, y:200, w:88, h:40},
+  {id:4,  num:'4',  name:'In Peyto+Dasten', cat:'butik', info:'',        room:1, x:120, y:250, w:88, h:40},
+  {id:5,  num:'5',  name:'Hammartis',       cat:'butik', info:'Compact', room:1, x:220, y:100, w:88, h:40},
+  {id:6,  num:'6',  name:'Elise',           cat:'butik', info:'',        room:1, x:220, y:150, w:88, h:40},
+  {id:7,  num:'7',  name:'Menard Lees',     cat:'inred', info:'',        room:1, x:220, y:200, w:88, h:40},
+  {id:8,  num:'8',  name:'Tyris-Tyrs',      cat:'butik', info:'',        room:1, x:220, y:250, w:88, h:40},
+  {id:9,  num:'9',  name:'Lafflerenz',      cat:'inred', info:'',        room:1, x:120, y:300, w:88, h:40},
+  {id:10, num:'10', name:'Junister',        cat:'butik', info:'',        room:2, x:330, y:100, w:88, h:40},
+  {id:11, num:'11', name:'Tocaso',          cat:'annat', info:'',        room:2, x:330, y:150, w:88, h:40},
+  {id:12, num:'12', name:'Copenhansen',     cat:'butik', info:'',        room:2, x:330, y:200, w:88, h:40},
+  {id:13, num:'13', name:'Chesterfield',    cat:'inred', info:'',        room:2, x:330, y:250, w:88, h:40},
+  {id:14, num:'14', name:'Acren',           cat:'butik', info:'',        room:2, x:430, y:100, w:88, h:40},
+  {id:15, num:'15', name:'Noira+Janner',    cat:'butik', info:'',        room:2, x:430, y:150, w:88, h:40},
+  {id:16, num:'16', name:'Uppveda',         cat:'inred', info:'',        room:2, x:430, y:200, w:88, h:40},
+  {id:17, num:'17', name:'Rossita Lyxl',    cat:'doft',  info:'',        room:2, x:430, y:250, w:88, h:40},
+  {id:18, num:'18', name:'Optus',           cat:'annat', info:'',        room:3, x:540, y:100, w:96, h:40},
+  {id:19, num:'19', name:'Marcelen',        cat:'butik', info:'',        room:3, x:540, y:150, w:96, h:40},
+  {id:20, num:'20', name:'Crazy',           cat:'butik', info:'',        room:3, x:540, y:200, w:96, h:40},
+  {id:21, num:'21', name:'PePe',            cat:'butik', info:'',        room:3, x:540, y:250, w:96, h:40},
+  {id:22, num:'22', name:'Dubai',           cat:'butik', info:'',        room:3, x:648, y:100, w:96, h:40},
+  {id:23, num:'23', name:'Lyon',            cat:'butik', info:'',        room:3, x:648, y:150, w:96, h:40},
+  {id:24, num:'24', name:'Rathliff',        cat:'butik', info:'',        room:3, x:648, y:200, w:96, h:40},
+  {id:25, num:'25', name:'Olivia+Modesto',  cat:'butik', info:'',        room:3, x:648, y:250, w:96, h:40},
+  {id:26, num:'26', name:'Junister',        cat:'butik', info:'',        room:3, x:540, y:300, w:96, h:40},
+  {id:27, num:'27', name:'Kopparbo',        cat:'inred', info:'',        room:4, x:770, y:100, w:88, h:40},
+  {id:28, num:'28', name:'Noira+Giemario',  cat:'butik', info:'',        room:4, x:770, y:150, w:88, h:40},
+  {id:29, num:'29', name:'Noira+Fiona',     cat:'butik', info:'Ellip',   room:4, x:770, y:200, w:88, h:40},
+  {id:30, num:'30', name:'Richelor Grey',   cat:'butik', info:'',        room:4, x:770, y:250, w:88, h:40},
+  {id:31, num:'31', name:'Menard',          cat:'inred', info:'',        room:4, x:864, y:100, w:88, h:40},
+  {id:32, num:'32', name:'Kopparbo',        cat:'inred', info:'',        room:4, x:864, y:150, w:88, h:40},
+  {id:33, num:'33', name:'Menard premium',  cat:'inred', info:'',        room:4, x:864, y:200, w:88, h:40},
+  {id:34, num:'34', name:'Hillte base',     cat:'ljus',  info:'',        room:4, x:864, y:250, w:88, h:40},
+  {id:35, num:'35', name:'Billirage',       cat:'butik', info:'',        room:5, x:980, y:100, w:88, h:40},
+  {id:36, num:'36', name:'Diea in',         cat:'butik', info:'',        room:5, x:980, y:150, w:88, h:40},
+  {id:37, num:'37', name:'Celine',          cat:'doft',  info:'',        room:5, x:980, y:200, w:88, h:40},
+  {id:38, num:'38', name:'Deluce',          cat:'butik', info:'',        room:5, x:980, y:250, w:88, h:40},
+  {id:39, num:'39', name:'Hilton Plus',     cat:'ljus',  info:'',        room:5, x:1074,y:100, w:88, h:40},
+  {id:40, num:'40', name:'Fillon lyx',      cat:'ljus',  info:'',        room:5, x:1074,y:150, w:88, h:40},
+  {id:41, num:'41', name:'Oslo',            cat:'annat', info:'',        room:5, x:1074,y:200, w:88, h:40},
+  {id:42, num:'42', name:'Grande',          cat:'butik', info:'',        room:5, x:1074,y:250, w:88, h:40},
+  {id:43, num:'43', name:'Noita+Berit',     cat:'butik', info:'',        room:5, x:980, y:300, w:88, h:40},
+  {id:44, num:'44', name:'Hilton Premium',  cat:'ljus',  info:'',        room:5, x:1074,y:300, w:88, h:40},
+  {id:45, num:'45', name:'Noita lyx',       cat:'butik', info:'',        room:5, x:980, y:350, w:88, h:40},
+  {id:46, num:'46', name:'Folan+Kato',      cat:'butik', info:'',        room:5, x:1074,y:350, w:88, h:40},
+  {id:47, num:'47', name:'Rossia',          cat:'butik', info:'',        room:0, x:30,  y:200, w:70, h:40},
+];
+
+let nextId = 100;
+let scale = 1;
+let selected = null;
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+function setSize(){
+  canvas.width = Math.round(W * scale);
+  canvas.height = Math.round(H * scale);
+  canvas.style.width = canvas.width + 'px';
+  canvas.style.height = canvas.height + 'px';
+}
+
+function draw(){
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.clearRect(0,0,W,H);
+
+  ctx.fillStyle = '#f5f3ee';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(20, 60, W-30, H-80);
+
+  ctx.fillStyle = '#dbd7ce';
+  ctx.fillRect(20, 160, 90, 200);
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(20, 160, 90, 200);
+
+  ctx.fillStyle = '#888';
+  ctx.font = '500 11px system-ui,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('INGÅNG', 65, 258);
+  ctx.fillStyle = '#aaa';
+  ctx.font = '10px system-ui,sans-serif';
+  ctx.fillText('846 m²', 65, 272);
+
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(110, 200); ctx.lineTo(110, 320); ctx.stroke();
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(110,200); ctx.arc(110,200,30,0,Math.PI/2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(110,320); ctx.arc(110,320,30,0,-Math.PI/2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ROOMS.forEach(r => {
+    ctx.fillStyle = r.color;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.strokeStyle = r.stroke;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = '#aaa';
+    ctx.font = '500 11px system-ui,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.label, r.x + r.w/2, r.y + 16);
+  });
+
+  const wallX = [310, 520, 750, 960];
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([5,4]);
+  wallX.forEach(wx => {
+    ctx.beginPath(); ctx.moveTo(wx,60); ctx.lineTo(wx,H-20); ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  items.forEach(item => {
+    const c = CAT_COLORS[item.cat] || CAT_COLORS.annat;
+    const sel = selected === item.id;
+    ctx.fillStyle = c.fill;
+    ctx.beginPath();
+    ctx.roundRect(item.x, item.y, item.w, item.h, 4);
+    ctx.fill();
+    ctx.strokeStyle = sel ? '#378ADD' : c.stroke;
+    ctx.lineWidth = sel ? 2.5 : 1;
+    ctx.beginPath();
+    ctx.roundRect(item.x, item.y, item.w, item.h, 4);
+    ctx.stroke();
+    ctx.fillStyle = c.text;
+    ctx.font = '500 9px system-ui,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('#'+item.num, item.x+4, item.y+11);
+    ctx.font = '10px system-ui,sans-serif';
+    const maxW = item.w - 8;
+    let name = item.name;
+    while(ctx.measureText(name).width > maxW && name.length > 4) name = name.slice(0,-1);
+    if(name !== item.name) name += '…';
+    ctx.fillText(name, item.x+4, item.y+24);
+    if(item.info){
+      ctx.font = '9px system-ui,sans-serif';
+      ctx.fillStyle = c.stroke;
+      ctx.fillText(item.info, item.x+4, item.y+35);
+    }
+  });
+
+  ctx.restore();
+}
+
+setSize(); draw();
+
+function canvasXY(e){
+  const r = canvas.getBoundingClientRect();
+  return {x:(e.clientX-r.left)/scale, y:(e.clientY-r.top)/scale};
+}
+
+function hitTest(x,y){
+  for(let i=items.length-1;i>=0;i--){
+    const it=items[i];
+    if(x>=it.x&&x<=it.x+it.w&&y>=it.y&&y<=it.y+it.h) return it.id;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousedown', e => {
+  const {x,y} = canvasXY(e);
+  const id = hitTest(x,y);
+  if(id){
+    selected = id;
+    const it = items.find(i=>i.id===id);
+    const offX = x - it.x, offY = y - it.y;
+    draw();
+    openPanel(id);
+    const onMove = ev => {
+      const p = canvasXY(ev);
+      it.x = Math.max(0, Math.min(Math.round(p.x - offX), W - it.w));
+      it.y = Math.max(60, Math.min(Math.round(p.y - offY), H - it.h - 20));
+      draw();
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  } else {
+    selected = null;
+    document.getElementById('edit-panel').style.display='none';
+    draw();
+  }
+});
+
+function openPanel(id){
+  const it = items.find(i=>i.id===id);
+  if(!it) return;
+  document.getElementById('edit-panel').style.display='block';
+  document.getElementById('panel-title').textContent = 'Redigera #'+it.num+' – '+it.name;
+  document.getElementById('f-num').value = it.num;
+  document.getElementById('f-name').value = it.name;
+  document.getElementById('f-cat').value = it.cat;
+  document.getElementById('f-info').value = it.info||'';
+  document.getElementById('f-room').value = it.room;
+}
+
+document.getElementById('btn-save').addEventListener('click',()=>{
+  const it = items.find(i=>i.id===selected);
+  if(!it) return;
+  it.num  = document.getElementById('f-num').value;
+  it.name = document.getElementById('f-name').value;
+  it.cat  = document.getElementById('f-cat').value;
+  it.info = document.getElementById('f-info').value;
+  it.room = +document.getElementById('f-room').value;
+  document.getElementById('edit-panel').style.display='none';
+  selected=null; draw();
+});
+
+document.getElementById('btn-cancel').addEventListener('click',()=>{
+  document.getElementById('edit-panel').style.display='none';
+  selected=null; draw();
+});
+
+document.getElementById('btn-del').addEventListener('click',()=>{
+  items = items.filter(i=>i.id!==selected);
+  document.getElementById('edit-panel').style.display='none';
+  selected=null; draw();
+});
+
+document.getElementById('btn-add').addEventListener('click',()=>{
+  const it = {id:nextId++, num:String(items.length+1), name:'Ny produkt', cat:'butik', info:'', room:1, x:120, y:100, w:88, h:40};
+  items.push(it);
+  selected = it.id;
+  draw();
+  openPanel(it.id);
+});
+
+document.getElementById('btn-zoom-in').addEventListener('click',()=>{
+  scale = Math.min(scale+0.2, 3);
+  setSize(); draw();
+});
+
+document.getElementById('btn-zoom-out').addEventListener('click',()=>{
+  scale = Math.max(scale-0.2, 0.3);
+  setSize(); draw();
+});
+
+document.getElementById('btn-export').addEventListener('click',()=>{
+  const lines = items.map(i=>`#${i.num} – ${i.name}${i.info?' ('+i.info+')':''} [${i.cat}]`).join('\n');
+  const blob = new Blob([lines], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'produktlista.txt';
+  a.click();
+});
+</script>
+</body>
+</html>
